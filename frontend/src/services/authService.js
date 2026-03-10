@@ -10,7 +10,7 @@ export const AuthService = {
             body: JSON.stringify({ username, password })
         });
         const data = await res.json();
-        
+
         if (res.ok) {
             // ⚡ WIPE LOCAL CACHE FOR A CLEAN SLATE!
             await IDB.clear('workspaces');
@@ -20,34 +20,34 @@ export const AuthService = {
             const token = data.token;
             debugger;
             localStorage.setItem('agency_token', token);
-            localStorage.setItem('agency_user', userObj.username); 
+            localStorage.setItem('agency_user', userObj.username);
             localStorage.setItem('agency_user_obj', JSON.stringify(userObj));
             return userObj;
         }
         throw new Error(data.message || 'Login failed');
     },
 
-    async signup(username, password) {
+    async signup(username, password, email) {
         const res = await fetch(`${API_URL}/signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify({ username, password, email })
         });
         const data = await res.json();
-        
+
         if (res.ok) {
             // ⚡ WIPE LOCAL CACHE FOR A CLEAN SLATE!
             await IDB.clear('workspaces');
             await IDB.clear('tasks');
             await IDB.clear('syncQueue');
-            const userObj = data.data?.user || data.user; 
+            const userObj = data.data?.user || data.user;
             console.log(JSON.stringify(userObj));
             const token = data.token;
 
             localStorage.setItem('agency_token', token);
             localStorage.setItem('agency_user', userObj.username);
-            localStorage.setItem('agency_user_obj', JSON.stringify(userObj)); 
-            
+            localStorage.setItem('agency_user_obj', JSON.stringify(userObj));
+
             return userObj;
         }
         throw new Error(data.message || 'Signup failed');
@@ -68,7 +68,7 @@ export const AuthService = {
     },
     getUser() {
         const userStr = localStorage.getItem('agency_user_obj');
-        
+
         // 1. Guard against bad values explicitly
         if (!userStr || userStr === 'undefined' || userStr === 'null') {
             return null;

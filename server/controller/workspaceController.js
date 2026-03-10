@@ -2,9 +2,17 @@ const Workspace = require('../model/Workspace');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 
-// 1. Get All Workspaces
+// 1. Get All Workspaces (owned + shared)
 exports.getWorkspaces = catchAsync(async (req, res, next) => {
-    const workspaces = await Workspace.find({ userId: req.user.userId });
+    console.log('[DEBUG getWorkspaces] userId:', req.user.userId, '_id:', req.user._id);
+    const workspaces = await Workspace.find({
+        $or: [
+            { userId: req.user.userId },
+            { 'members.userId': req.user.userId }
+        ],
+        isDeleted: false
+    });
+    console.log('[DEBUG getWorkspaces] Found:', workspaces.length, 'workspaces, clientIds:', workspaces.map(w => w.clientId));
 
     res.status(200).json({
         status: 'success',
@@ -19,7 +27,8 @@ exports.getWorkspaces = catchAsync(async (req, res, next) => {
 exports.createWorkspace = catchAsync(async (req, res, next) => {
     const newWorkspace = await Workspace.create({
         ...req.body,
-        userId: req.user.userId 
+        userId: req.user.userId,
+        members: [{ userId: req.user.userId, role: 'owner' }]
     });
 
     res.status(201).json({

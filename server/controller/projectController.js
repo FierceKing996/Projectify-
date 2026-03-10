@@ -2,6 +2,7 @@ const Project = require('../model/Project');
 const Task = require('../model/tasks');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
+const sseManager = require('../service/sseManager');
 
 exports.createProject = catchAsync(async (req, res, next) => {
     // 1. Create the project
@@ -11,6 +12,9 @@ exports.createProject = catchAsync(async (req, res, next) => {
         status: 'success',
         data: { project: newProject }
     });
+
+    // Broadcast to collaborators
+    sseManager.broadcast(req.body.workspaceId, 'project_created', { project: newProject }, req.user?._id?.toString());
 });
 
 exports.getWorkspaceProjects = catchAsync(async (req, res, next) => {
@@ -39,6 +43,9 @@ exports.updateProjectSections = catchAsync(async (req, res, next) => {
     if (!project) return next(new AppError('No project found', 404));
 
     res.status(200).json({ status: 'success', data: { project } });
+
+    // Broadcast to collaborators
+    sseManager.broadcast(project.workspaceId, 'project_updated', { project }, req.user?._id?.toString());
 });
 
 exports.deleteProject = catchAsync(async (req, res, next) => {
@@ -51,4 +58,7 @@ exports.deleteProject = catchAsync(async (req, res, next) => {
     await Task.updateMany({ projectId: project._id }, { isDeleted: true });
 
     res.status(204).json({ status: 'success', data: null });
+
+    // Broadcast to collaborators
+    sseManager.broadcast(project.workspaceId, 'project_deleted', { projectId: req.params.projectId }, req.user?._id?.toString());
 });

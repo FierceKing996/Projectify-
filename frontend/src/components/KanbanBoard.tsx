@@ -1,22 +1,26 @@
 import { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
-import { FiMoreHorizontal, FiEdit2, FiTrash2, FiCheck, FiX, FiCloudOff, FiTag, FiColumns, FiBookmark, FiGrid } from 'react-icons/fi';
+import { FiMoreHorizontal, FiEdit2, FiTrash2, FiCheck, FiX, FiCloudOff, FiTag, FiColumns, FiBookmark, FiGrid, FiBell, FiList } from 'react-icons/fi';
 import { ProjectService } from '../services/projectService';
 import { TaskService } from '../services/taskService';
 import InputModal from './InputModal';
 import ConfirmModal from './ConfirmModal';
+import TaskDetailModal from './TaskDetailModal';
 
 interface KanbanBoardProps {
     project: any;
     tasks: any[];
     onTaskMove: (taskId: string, sectionId: string) => void;
-    onTaskCreate: (sectionId: string, content: string) => void;
+    onTaskCreate: (sectionId: string, content: string, assignedTo?: string | null) => void;
     onTaskUpdate?: () => void;
+    isAdmin?: boolean;
+    workspaceMembers?: any[];
 }
 
-export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, onTaskUpdate }: KanbanBoardProps) {
+export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, onTaskUpdate, isAdmin = true, workspaceMembers = [] }: KanbanBoardProps) {
     const [sections, setSections] = useState<any[]>([]);
     const [newTaskContent, setNewTaskContent] = useState<Record<string, string>>({});
+    const [newTaskAssignee, setNewTaskAssignee] = useState<Record<string, string>>({});
     const [openPriorityMenuId, setOpenPriorityMenuId] = useState<string | null>(null);
     // UI State
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -28,6 +32,8 @@ export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, 
     const [labelTargetTaskId, setLabelTargetTaskId] = useState<string | null>(null);
     const [labelTargetLabels, setLabelTargetLabels] = useState<string[]>([]);
     const [pendingDelete, setPendingDelete] = useState<{ type: 'task' | 'section'; id: string; title: string } | null>(null);
+    const [reminderPickerTaskId, setReminderPickerTaskId] = useState<string | null>(null);
+    const [selectedTask, setSelectedTask] = useState<any>(null);
 
     useEffect(() => {
         setLocalTasks(tasks);
@@ -165,6 +171,38 @@ export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, 
         }
     };
 
+    const handleSetReminder = async (taskId: string, reminderAt: string) => {
+        try {
+            const updatedTasks = [...localTasks];
+            const taskIndex = updatedTasks.findIndex(t => (t._id || t.clientId || t.id) === taskId);
+            if (taskIndex > -1) {
+                updatedTasks[taskIndex].reminderAt = reminderAt;
+                setLocalTasks(updatedTasks);
+            }
+            await TaskService.updateTask(taskId, { reminderAt });
+            setReminderPickerTaskId(null);
+            if (onTaskUpdate) onTaskUpdate();
+        } catch (e) {
+            console.error("Failed to set reminder", e);
+        }
+    };
+
+    const handleClearReminder = async (taskId: string) => {
+        try {
+            const updatedTasks = [...localTasks];
+            const taskIndex = updatedTasks.findIndex(t => (t._id || t.clientId || t.id) === taskId);
+            if (taskIndex > -1) {
+                updatedTasks[taskIndex].reminderAt = null;
+                setLocalTasks(updatedTasks);
+            }
+            await TaskService.updateTask(taskId, { reminderAt: null });
+            setReminderPickerTaskId(null);
+            if (onTaskUpdate) onTaskUpdate();
+        } catch (e) {
+            console.error("Failed to clear reminder", e);
+        }
+    };
+
     const getPriorityStyle = (priority: string) => {
         switch (priority) {
             case 'High': return 'bg-red-50 text-red-700 ring-1 ring-red-600/20';
@@ -181,9 +219,11 @@ export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, 
                     <h2 className="text-xl font-bold text-gray-900">{project.title}</h2>
                     <p className="text-xs text-gray-500">Board View</p>
                 </div>
-                <button onClick={() => setShowSectionModal(true)} className="bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-1.5 rounded-md border border-gray-300 shadow-sm transition-colors">
-                    + Add Section
-                </button>
+                {isAdmin && (
+                    <button onClick={() => setShowSectionModal(true)} className="bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-1.5 rounded-md border border-gray-300 shadow-sm transition-colors">
+                        + Add Section
+                    </button>
+                )}
             </div>
 
             <DragDropContext onDragEnd={onDragEnd}>
@@ -199,23 +239,31 @@ export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, 
                                             <div ref={colProvided.innerRef} {...colProvided.draggableProps} className={`w-80 flex-shrink-0 flex flex-col bg-gray-100/50 rounded-lg border max-h-full group/section transition-shadow ${colSnapshot.isDragging ? 'shadow-xl border-blue-300 ring-2 ring-blue-200' : 'border-gray-200'}`}>
                                                 <div className="flex items-center justify-between p-3">
                                                     <div className="flex items-center gap-2">
-                                                        {/* Drag Handle */}
-                                                        <span {...colProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 transition-colors" title="Drag to reorder">
-                                                            <FiGrid size={14} />
-                                                        </span>
+                                                        {/* Drag Handle — admin only */}
+                                                        {isAdmin ? (
+                                                            <span {...colProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 transition-colors" title="Drag to reorder">
+                                                                <FiGrid size={14} />
+                                                            </span>
+                                                        ) : (
+                                                            <span {...colProvided.dragHandleProps} style={{ cursor: 'default' }} className="text-gray-300">
+                                                                <FiGrid size={14} />
+                                                            </span>
+                                                        )}
                                                         <h3 className="font-semibold text-sm text-gray-700">{section.title}</h3>
                                                         <span className="bg-gray-200 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">{sectionTasks.length}</span>
                                                     </div>
-                                                    {/* Delete Section Button (visible on hover) */}
-                                                    <button
-                                                        onClick={() => {
-                                                            setPendingDelete({ type: 'section', id: section.id, title: section.title });
-                                                        }}
-                                                        className="opacity-0 group-hover/section:opacity-100 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-all duration-150"
-                                                        title="Delete Section"
-                                                    >
-                                                        <FiTrash2 size={14} />
-                                                    </button>
+                                                    {/* Delete Section Button (admin only, visible on hover) */}
+                                                    {isAdmin && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setPendingDelete({ type: 'section', id: section.id, title: section.title });
+                                                            }}
+                                                            className="opacity-0 group-hover/section:opacity-100 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-all duration-150"
+                                                            title="Delete Section"
+                                                        >
+                                                            <FiTrash2 size={14} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                                 <Droppable droppableId={section.id} type="TASK">
                                                     {(provided) => (
@@ -230,7 +278,8 @@ export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, 
                                                                     <Draggable key={activeTaskId} draggableId={activeTaskId} index={index}>
                                                                         {(provided, snapshot) => (
                                                                             <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}
-                                                                                className={`bg-white p-3 rounded-lg border shadow-sm group relative transition-all ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-500 rotate-2 z-50' : 'border-gray-200 hover:border-blue-300'
+                                                                                onClick={() => { if (!isEditing) setSelectedTask(task); }}
+                                                                                className={`bg-white p-3 rounded-lg border shadow-sm group relative transition-all cursor-pointer ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-500 rotate-2 z-50' : 'border-gray-200 hover:border-blue-300'
                                                                                     }`}
                                                                             >
                                                                                 <div className="flex justify-between items-start mb-2">
@@ -290,6 +339,9 @@ export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, 
                                                                                                     <button onClick={(e) => { e.stopPropagation(); openLabelModal(activeTaskId, task.labels); }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2">
                                                                                                         <FiTag size={12} /> Add Label
                                                                                                     </button>
+                                                                                                    <button onClick={(e) => { e.stopPropagation(); setReminderPickerTaskId(activeTaskId); setOpenMenuId(null); }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-amber-50 hover:text-amber-600 flex items-center gap-2">
+                                                                                                        <FiBell size={12} /> Set Reminder
+                                                                                                    </button>
                                                                                                     <button onClick={(e) => { e.stopPropagation(); setPendingDelete({ type: 'task', id: activeTaskId, title: task.content }); setOpenMenuId(null); }} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
                                                                                                         <FiTrash2 size={12} /> Delete
                                                                                                     </button>
@@ -323,6 +375,70 @@ export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, 
                                                                                         ))}
                                                                                     </div>
                                                                                 )}
+
+                                                                                {/* Subtask progress + assigned avatar row */}
+                                                                                <div className="flex items-center justify-between mt-2">
+                                                                                    {task.subtasks && task.subtasks.length > 0 ? (
+                                                                                        <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                                                                                            <FiList size={10} />
+                                                                                            <span>{task.subtasks.filter((s: any) => s.completed).length}/{task.subtasks.length}</span>
+                                                                                        </div>
+                                                                                    ) : <div />}
+                                                                                    {(task.assignedTo?.username || task.userId?.username) && (
+                                                                                        <div
+                                                                                            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold bg-gradient-to-br from-indigo-500 to-violet-600"
+                                                                                            title={`Assigned to ${task.assignedTo?.username || task.userId?.username}`}
+                                                                                        >
+                                                                                            {(task.assignedTo?.username || task.userId?.username || '?').charAt(0).toUpperCase()}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+
+                                                                                {/* Reminder Badge */}
+                                                                                {task.reminderAt && (
+                                                                                    <div className="flex items-center gap-1.5 mt-2">
+                                                                                        <span className={new Date(task.reminderAt) <= new Date() ? 'text-red-500' : 'text-amber-500'}><FiBell size={11} /></span>
+                                                                                        <span className={`text-[10px] font-medium ${new Date(task.reminderAt) <= new Date() ? 'text-red-500' : 'text-amber-500'}`}>
+                                                                                            {new Date(task.reminderAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                                        </span>
+                                                                                        <button
+                                                                                            onClick={(e) => { e.stopPropagation(); handleClearReminder(activeTaskId); }}
+                                                                                            className="text-gray-300 hover:text-red-400 transition-colors ml-1"
+                                                                                            title="Clear Reminder"
+                                                                                        >
+                                                                                            <FiX size={11} />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                )}
+
+                                                                                {/* Reminder Datetime Picker */}
+                                                                                {reminderPickerTaskId === activeTaskId && (
+                                                                                    <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg"
+                                                                                        onClick={(e) => e.stopPropagation()}
+                                                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                                                        onPointerDown={(e) => e.stopPropagation()}
+                                                                                    >
+                                                                                        <label className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider mb-1 block">Set Reminder</label>
+                                                                                        <input
+                                                                                            type="datetime-local"
+                                                                                            className="w-full text-xs border border-amber-300 rounded px-2 py-1.5 outline-none focus:ring-2 focus:ring-amber-200 bg-white"
+                                                                                            draggable={false}
+                                                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                                                            onPointerDown={(e) => e.stopPropagation()}
+                                                                                            onChange={(e) => {
+                                                                                                if (e.target.value) {
+                                                                                                    handleSetReminder(activeTaskId, new Date(e.target.value).toISOString());
+                                                                                                }
+                                                                                            }}
+                                                                                        />
+                                                                                        <button
+                                                                                            onClick={() => setReminderPickerTaskId(null)}
+                                                                                            className="mt-1 text-[10px] text-gray-500 hover:text-gray-700"
+                                                                                        >
+                                                                                            Cancel
+                                                                                        </button>
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         )}
                                                                     </Draggable>
@@ -337,15 +453,36 @@ export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, 
                                                     <form onSubmit={(e) => {
                                                         e.preventDefault();
                                                         const val = newTaskContent[section.id];
+                                                        const assignTo = newTaskAssignee[section.id] || null;
                                                         if (val && val.trim()) {
                                                             setNewTaskContent({ ...newTaskContent, [section.id]: '' });
-                                                            onTaskCreate(section.id, val);
+                                                            setNewTaskAssignee({ ...newTaskAssignee, [section.id]: '' });
+                                                            onTaskCreate(section.id, val, assignTo);
                                                         }
                                                     }}>
                                                         <input
                                                             className="w-full bg-gray-50 hover:bg-white border border-transparent hover:border-gray-300 rounded-md p-2 text-sm text-gray-700 placeholder-gray-500 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                                                             placeholder="+ Add Task" value={newTaskContent[section.id] || ''} onChange={(e) => setNewTaskContent({ ...newTaskContent, [section.id]: e.target.value })}
                                                         />
+                                                        {newTaskContent[section.id] && (
+                                                            <div className="flex items-center justify-between mt-2 px-1 animate-in fade-in zoom-in-95 duration-200">
+                                                                {isAdmin ? (
+                                                                    <select
+                                                                        className="max-w-[130px] text-[11px] sm:text-xs text-gray-600 border border-gray-200 rounded p-1 bg-white outline-none cursor-pointer hover:border-gray-300 focus:border-blue-500 transition-colors truncate"
+                                                                        value={newTaskAssignee[section.id] || ''}
+                                                                        onChange={(e) => setNewTaskAssignee({ ...newTaskAssignee, [section.id]: e.target.value })}
+                                                                    >
+                                                                        <option value="">Unassigned</option>
+                                                                        {workspaceMembers.map((member: any) => (
+                                                                            <option key={member._id} value={member._id}>Assign: {member.username}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                ) : <div />}
+                                                                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] sm:text-xs font-semibold px-2 py-1 rounded transition-colors flex-shrink-0">
+                                                                    Save Task
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </form>
                                                 </div>
                                             </div>
@@ -402,6 +539,15 @@ export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, 
                         ? `Are you sure you want to delete this task?`
                         : `Delete section "${pendingDelete?.title}"? Tasks in this section won't be deleted but will lose their section.`
                 }
+            />
+
+            {/* Task Detail Modal */}
+            <TaskDetailModal
+                isOpen={!!selectedTask}
+                onClose={() => setSelectedTask(null)}
+                task={selectedTask}
+                onTaskUpdate={() => { setSelectedTask(null); if (onTaskUpdate) onTaskUpdate(); }}
+                workspaceMembers={workspaceMembers}
             />
         </div>
     );

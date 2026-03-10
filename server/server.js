@@ -7,7 +7,7 @@ const archiveRoutes = require('./routes/archiveRoutes');
 
 // Import AppError so your 404 handler doesn't crash!
 // (Double check this path matches your folder structure)
-const AppError = require('./utils/AppError'); 
+const AppError = require('./utils/AppError');
 
 const PORT = process.env.PORT || 5000;
 const authController = require('./controller/authController');
@@ -18,8 +18,9 @@ const workspaceRoutes = require('./routes/workspaceRoutes');
 const passport = require('passport');
 const adminRoutes = require('./routes/adminRoutes');
 const projectRouter = require('./routes/projectRoutes');
+const collaborationRoutes = require('./routes/collaborationRoutes');
 require('./config/passport');
-connectDB(); 
+connectDB();
 const userRoutes = require('./routes/userRoutes');
 const app = express();
 
@@ -34,9 +35,10 @@ app.use(passport.initialize());
 app.use('/api/archives', protect, archiveRoutes);
 app.use('/api/admin', adminRoutes);
 
-app.use('/api/projects', projectRouter); 
+app.use('/api/projects', projectRouter);
 app.use('/api/users', userRoutes);
 app.use('/api/tasks', protect, taskRoutes);
+app.use('/api/analytics', require('./routes/analyticsRoutes'));
 // Auth Routes
 app.post('/api/auth/signup', authController.signup);
 app.post('/api/auth/login', authController.login);
@@ -44,6 +46,7 @@ app.post('/api/auth/login', authController.login);
 // Protected Routes
 app.use('/api/tasks', protect, taskRoutes);
 app.use('/api/workspaces', protect, workspaceRoutes);
+app.use('/api/collaboration', collaborationRoutes);
 
 // 404 Unhandled Route Catcher
 // CHANGED: Using app.use() instead of app.all('*') prevents the regex crash

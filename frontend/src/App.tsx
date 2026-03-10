@@ -8,6 +8,7 @@ import { IDB } from './db/idbHelper.js';
 import { TaskService } from './services/taskService';
 import { WorkspaceService } from './services/workspaceService.js';
 import { ProjectService } from './services/projectService';
+import { CollaborationService } from './services/collaborationService.js';
 import Auth from './components/Auth';
 
 // Import UI Components
@@ -17,6 +18,8 @@ import Footer from './components/Footer';
 import WorkspaceModal from './components/WorkspaceModal';
 import AdminDashboard from './components/AdminDashboard';
 import KanbanBoard from './components/KanbanBoard';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
+import CalendarView from './components/CalendarView';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(AuthService.isAuthenticated());
@@ -46,6 +49,62 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  const [workspaceMembers, setWorkspaceMembers] = useState<any[]>([]);
+  const [currentView, setCurrentView] = useState<'kanban' | 'analytics' | 'calendar'>('kanban');
+
+  // --- COLLABORATION: Heartbeat every 30s ---
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    // Send heartbeat immediately
+    CollaborationService.sendHeartbeat();
+    const interval = setInterval(() => {
+      CollaborationService.sendHeartbeat();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
+  // --- COLLABORATION: Fetch workspace members & presence ---
+  useEffect(() => {
+    if (!isAuthenticated || !currentWorkspace?.id) return;
+    // Reset immediately to prevent stale avatars from stacking
+    setWorkspaceMembers([]);
+    const fetchMembers = async () => {
+      try {
+        const members = await CollaborationService.getMembers(currentWorkspace.id);
+        setWorkspaceMembers(members);
+      } catch {
+        setWorkspaceMembers([]);
+      }
+    };
+    fetchMembers();
+    // Poll presence every 30s
+    const presenceInterval = setInterval(fetchMembers, 30000);
+    return () => clearInterval(presenceInterval);
+  }, [isAuthenticated, currentWorkspace]);
+
+  // --- COLLABORATION: Handle invite token in URL ---
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get('invite');
+    if (inviteToken) {
+      CollaborationService.acceptInvite(inviteToken)
+        .then((data: any) => {
+          if (data.status === 'success') {
+            alert(`🎉 ${data.message}`);
+            setSidebarRefreshTrigger(prev => prev + 1);
+          } else if (data.status === 'pending_signup') {
+            alert(data.message);
+          }
+          // Clean URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        })
+        .catch((err: Error) => {
+          console.error('Failed to accept invite:', err.message);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        });
+    }
+  }, [isAuthenticated]);
 
   // --- ⚡ 1. DEFINE LOAD TASKS (The Missing Piece) ---
   const loadTasks = async () => {
@@ -79,8 +138,72 @@ function App() {
     return () => window.removeEventListener('online', handleOnline);
   }, [currentProject, currentWorkspace]); // Reload if project OR workspace changes
 
+  // --- 📡 SSE: Real-time task sync for shared workspaces ---
+  useEffect(() => {
+    if (!isAuthenticated || !currentWorkspace?.id) return;
+
+    const token = localStorage.getItem('agency_token');
+    const eventSource = new EventSource(
+      `http://localhost:5000/api/collaboration/workspaces/${currentWorkspace.id}/events?token=${token}`
+    );
+
+    eventSource.onmessage = (event) => {
+      try {
+        const { type, data } = JSON.parse(event.data);
+        if (['task_created', 'task_updated', 'task_moved'].includes(type)) {
+          console.log(`📡 SSE: Received ${type}, refreshing tasks...`);
+          loadTasks();
+        } else if (type === 'task_deleted' && data?.taskId) {
+          console.log(`📡 SSE: Task deleted (${data.taskId}), removing locally...`);
+          // Remove from React state immediately
+          setTasks(prev => prev.filter(t =>
+            t.clientId !== data.taskId && t._id !== data.taskId && t.id !== data.taskId
+          ));
+
+          // Bulletproof IDB remove: find exact local task first
+          IDB.getAll('tasks').then((allTasks: any[]) => {
+            const localTask = allTasks.find(t =>
+              t.id === data.taskId || t._id === data.taskId || t.clientId === data.taskId
+            );
+            if (localTask) {
+              IDB.delete('tasks', localTask.id).catch(() => { });
+            }
+          });
+        } else if (['project_created', 'project_updated', 'project_deleted'].includes(type) && data) {
+          console.log(`📡 SSE: Received ${type}, refreshing projects...`);
+          // Force sidebar to refetch projects
+          setSidebarRefreshTrigger(prev => prev + 1);
+
+          // If the current project was updated (e.g., sections moved/renamed), update state
+          if (type === 'project_updated' && currentProject && currentProject._id === data.project._id) {
+            setCurrentProject(data.project);
+            // Also optionally update IDB local copy if you cache projects locally
+            // ProjectService/IDB sync for projects might be lighter weight
+          }
+
+          // If the current project was deleted, deselect it
+          if (type === 'project_deleted' && currentProject && currentProject._id === data.projectId) {
+            setCurrentProject(null);
+            setTasks([]);
+          }
+        }
+      } catch (err) {
+        console.warn('SSE parse error:', err);
+      }
+    };
+
+    eventSource.onerror = () => {
+      console.warn('📡 SSE connection error, will auto-reconnect...');
+    };
+
+    return () => {
+      eventSource.close();
+      console.log('📡 SSE connection closed');
+    };
+  }, [isAuthenticated, currentWorkspace, currentProject]);
+
   // --- ⚡ 3. HANDLE CREATE TASK ---
-  const handleTaskCreate = async (sectionId: string, content: string) => {
+  const handleTaskCreate = async (sectionId: string, content: string, assignedTo?: string | null) => {
     const tempId = `temp-${Date.now()}`;
     const newTask = {
       clientId: tempId,
@@ -90,7 +213,8 @@ function App() {
       workspaceId: currentWorkspace.id,
       priority: 'Medium',
       order: tasks.length,
-      completed: false
+      completed: false,
+      assignedTo: assignedTo || null
     };
 
     // Optimistic Update (Show it immediately)
@@ -211,6 +335,12 @@ function App() {
   });
 
   const allLabels = Array.from(new Set(tasks.flatMap(task => task.labels || [])));
+
+  // --- Compute user's role in current workspace ---
+  const currentUserId = user?._id || user?.id;
+  const currentMember = workspaceMembers.find((m: any) => m._id === currentUserId);
+  const userRole = currentMember?.role || 'owner'; // default to owner if members not loaded yet
+  const isAdmin = userRole === 'owner';
   // --- MAIN RENDER ---
   return (
     // 1. Change app-container to have a white background and full height
@@ -230,6 +360,9 @@ function App() {
         onLabelSelect={(label) => setSelectedLabel(selectedLabel === label ? null : label)}
         onWorkspaceDelete={handleWorkspaceDelete}
         onProjectDelete={handleProjectDelete}
+        userRole={userRole}
+        currentView={currentView}
+        setCurrentView={setCurrentView}
       />
 
       {/* 2. Change dashboard to have a light gray background (bg-gray-50) */}
@@ -238,16 +371,24 @@ function App() {
           username={userName}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
+          tasks={tasks}
+          workspaceMembers={workspaceMembers}
         />
 
-        {/* SWITCH: Show Kanban OR Empty State */}
-        {currentProject ? (
+        {/* SWITCH: Show Kanban, Analytics, Calendar OR Empty State */}
+        {currentView === 'analytics' ? (
+          <AnalyticsDashboard workspaceId={currentWorkspace.id} />
+        ) : currentView === 'calendar' ? (
+          <CalendarView tasks={tasks} currentUserId={currentUserId} isAdmin={isAdmin} />
+        ) : currentProject ? (
           <KanbanBoard
             project={currentProject}
             tasks={filteredTasks}
             onTaskMove={(id, section) => loadTasks()}
             onTaskCreate={handleTaskCreate}
             onTaskUpdate={loadTasks}
+            isAdmin={isAdmin}
+            workspaceMembers={workspaceMembers}
           />
         ) : (
           // 3. Updated Empty State (Light Theme)

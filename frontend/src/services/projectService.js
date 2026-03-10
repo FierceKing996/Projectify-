@@ -12,6 +12,10 @@ export const ProjectService = {
             },
             body: JSON.stringify({ title, workspaceId })
         });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || `Failed to create project (${res.status})`);
+        }
         const data = await res.json();
         return data.data.project;
     },
@@ -36,9 +40,9 @@ export const ProjectService = {
         const data = await res.json();
         return data.data.project;
     },
-    
+
     async deleteProject(projectId) {
-         await fetch(`${API_URL}/${projectId}`, {
+        await fetch(`${API_URL}/${projectId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${AuthService.getToken()}` }
         });
