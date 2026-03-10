@@ -4,6 +4,56 @@ const AppError = require('../utils/AppError');
 const mongoose = require('mongoose');
 const { sendTaskNotification } = require('../service/sqsService');
 const sseManager = require('../service/sseManager');
+const activityLogger = require('../service/activityLogger');
+
+const normalizeId = (value) => (value ? value.toString() : null);
+
+const safelyLogActivity = async (callback) => {
+    try {
+        await callback();
+    } catch (error) {
+        console.error('Activity log write failed:', error.message);
+    }
+};
+
+const logTaskStateChanges = async ({ previousTask, task, actor, updates = {} }) => {
+    const previousAssignedTo = normalizeId(previousTask.assignedTo);
+    const nextAssignedTo = normalizeId(task.assignedTo);
+
+    if (previousAssignedTo !== nextAssignedTo) {
+        await activityLogger.logTaskAssignmentChanged({
+            task,
+            actor,
+            assignedTo: task.assignedTo
+        });
+    }
+
+    if (previousTask.completed !== task.completed) {
+        await activityLogger.logTaskCompletionChanged({
+            task,
+            actor,
+            completed: task.completed
+        });
+    }
+
+    if (previousTask.sectionId !== task.sectionId) {
+        await activityLogger.logTaskMoved({
+            task,
+            actor,
+            fromSectionId: previousTask.sectionId,
+            toSectionId: task.sectionId
+        });
+    }
+
+    const changedKeys = Object.keys(updates).filter(
+        (key) => !['assignedTo', 'completed', 'sectionId', 'order', 'completedAt', 'updatedAt'].includes(key)
+    );
+
+    if (changedKeys.length > 0) {
+        await activityLogger.logTaskUpdated({ task, actor });
+    }
+};
+
 exports.getTasks = catchAsync(async (req, res, next) => {
     // Return all tasks with populated user info
     const tasks = await Task.find({ isDeleted: false })
@@ -39,6 +89,18 @@ exports.createTask = catchAsync(async (req, res, next) => {
         isDeleted: false // Explicitly set false
     });
 
+    await safelyLogActivity(async () => {
+        await activityLogger.logTaskCreated({ task: newTask, actor: req.user });
+
+        if (newTask.assignedTo) {
+            await activityLogger.logTaskAssignmentChanged({
+                task: newTask,
+                actor: req.user,
+                assignedTo: newTask.assignedTo
+            });
+        }
+    });
+
     res.status(201).json({ status: 'success', data: { task: newTask } });
 
     // Broadcast to collaborators
@@ -63,6 +125,12 @@ exports.updateTask = catchAsync(async (req, res, next) => {
         return next(new AppError('No task found with that ID', 404));
     }
 
+    const previousTask = {
+        assignedTo: task.assignedTo,
+        completed: task.completed,
+        sectionId: task.sectionId
+    };
+
     // Handle completedAt tracking
     if (req.body.completed !== undefined) {
         if (req.body.completed && !task.completed) {
@@ -75,6 +143,15 @@ exports.updateTask = catchAsync(async (req, res, next) => {
     // Update fields
     Object.assign(task, req.body);
     await task.save();
+
+    await safelyLogActivity(async () => {
+        await logTaskStateChanges({
+            previousTask,
+            task,
+            actor: req.user,
+            updates: req.body
+        });
+    });
 
     res.status(200).json({ status: 'success', data: { task } });
 
@@ -108,6 +185,10 @@ exports.deleteTask = catchAsync(async (req, res, next) => {
         return next(new AppError('No task found to delete', 404));
     }
 
+    await safelyLogActivity(async () => {
+        await activityLogger.logTaskDeleted({ task, actor: req.user });
+    });
+
     res.status(204).json({ status: 'success', data: null });
 
     // Broadcast to collaborators
@@ -120,6 +201,12 @@ exports.moveTask = catchAsync(async (req, res, next) => {
 
     const task = await Task.findOne({ $or: [{ clientId: taskId }, { _id: taskId }] });
     if (!task) return next(new AppError('Task not found', 404));
+
+    const previousTask = {
+        assignedTo: task.assignedTo,
+        completed: task.completed,
+        sectionId: task.sectionId
+    };
 
     task.sectionId = sectionId;
     if (order !== undefined) task.order = order;
@@ -134,6 +221,15 @@ exports.moveTask = catchAsync(async (req, res, next) => {
     }
 
     await task.save();
+
+    await safelyLogActivity(async () => {
+        await logTaskStateChanges({
+            previousTask,
+            task,
+            actor: req.user,
+            updates: { sectionId, order, completed }
+        });
+    });
 
     if (!task) return next(new AppError('Task not found', 404));
 

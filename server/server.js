@@ -19,6 +19,7 @@ const passport = require('passport');
 const adminRoutes = require('./routes/adminRoutes');
 const projectRouter = require('./routes/projectRoutes');
 const collaborationRoutes = require('./routes/collaborationRoutes');
+const activityRoutes = require('./routes/activityRoutes');
 require('./config/passport');
 connectDB();
 const userRoutes = require('./routes/userRoutes');
@@ -39,6 +40,7 @@ app.use('/api/projects', projectRouter);
 app.use('/api/users', userRoutes);
 app.use('/api/tasks', protect, taskRoutes);
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
+app.use('/api/activity', protect, activityRoutes);
 // Auth Routes
 app.post('/api/auth/signup', authController.signup);
 app.post('/api/auth/login', authController.login);

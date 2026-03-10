@@ -5,7 +5,7 @@ import TaskInput from './TaskInput';
 import TaskCard from './TaskCard';
 import { useTasks } from '../hooks/useTasks'; // ⚡ Import your new hook
 
-export default function TaskBoard({ workspaceId, workspaceTitle,searchQuery}: any) {
+export default function TaskBoard({ workspaceId, workspaceTitle: _workspaceTitle, searchQuery }: any) {
   
   // ⚡ Call the hook! It does all the heavy lifting behind the scenes.
   const { tasks, activeTasks, completedTasks, fetchTasks } = useTasks(workspaceId);

@@ -14,12 +14,12 @@ import Auth from './components/Auth';
 // Import UI Components
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import Footer from './components/Footer';
 import WorkspaceModal from './components/WorkspaceModal';
 import AdminDashboard from './components/AdminDashboard';
 import KanbanBoard from './components/KanbanBoard';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import CalendarView from './components/CalendarView';
+import ActivityLog from './components/ActivityLog';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(AuthService.isAuthenticated());
@@ -50,7 +50,8 @@ function App() {
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const [workspaceMembers, setWorkspaceMembers] = useState<any[]>([]);
-  const [currentView, setCurrentView] = useState<'kanban' | 'analytics' | 'calendar'>('kanban');
+  const [currentView, setCurrentView] = useState<'kanban' | 'analytics' | 'calendar' | 'activity'>('kanban');
+  const isLocalPersonalWorkspace = currentWorkspace?.id === 'default-personal';
 
   // --- COLLABORATION: Heartbeat every 30s ---
   useEffect(() => {
@@ -65,7 +66,7 @@ function App() {
 
   // --- COLLABORATION: Fetch workspace members & presence ---
   useEffect(() => {
-    if (!isAuthenticated || !currentWorkspace?.id) return;
+    if (!isAuthenticated || !currentWorkspace?.id || isLocalPersonalWorkspace) return;
     // Reset immediately to prevent stale avatars from stacking
     setWorkspaceMembers([]);
     const fetchMembers = async () => {
@@ -80,7 +81,7 @@ function App() {
     // Poll presence every 30s
     const presenceInterval = setInterval(fetchMembers, 30000);
     return () => clearInterval(presenceInterval);
-  }, [isAuthenticated, currentWorkspace]);
+  }, [isAuthenticated, currentWorkspace, isLocalPersonalWorkspace]);
 
   // --- COLLABORATION: Handle invite token in URL ---
   useEffect(() => {
@@ -140,7 +141,7 @@ function App() {
 
   // --- 📡 SSE: Real-time task sync for shared workspaces ---
   useEffect(() => {
-    if (!isAuthenticated || !currentWorkspace?.id) return;
+    if (!isAuthenticated || !currentWorkspace?.id || isLocalPersonalWorkspace) return;
 
     const token = localStorage.getItem('agency_token');
     const eventSource = new EventSource(
@@ -200,7 +201,7 @@ function App() {
       eventSource.close();
       console.log('📡 SSE connection closed');
     };
-  }, [isAuthenticated, currentWorkspace, currentProject]);
+  }, [isAuthenticated, currentWorkspace, currentProject, isLocalPersonalWorkspace]);
 
   // --- ⚡ 3. HANDLE CREATE TASK ---
   const handleTaskCreate = async (sectionId: string, content: string, assignedTo?: string | null) => {
@@ -246,7 +247,7 @@ function App() {
     }
   };
 
-  const handleProjectDelete = async (projectId: string, wsId: string) => {
+  const handleProjectDelete = async (projectId: string, _wsId: string) => {
     try {
       await ProjectService.deleteProject(projectId);
       // If deleted project was the current one, clear the board
@@ -376,7 +377,9 @@ function App() {
         />
 
         {/* SWITCH: Show Kanban, Analytics, Calendar OR Empty State */}
-        {currentView === 'analytics' ? (
+        {currentView === 'activity' ? (
+          <ActivityLog />
+        ) : currentView === 'analytics' ? (
           <AnalyticsDashboard workspaceId={currentWorkspace.id} />
         ) : currentView === 'calendar' ? (
           <CalendarView tasks={tasks} currentUserId={currentUserId} isAdmin={isAdmin} />
@@ -384,7 +387,6 @@ function App() {
           <KanbanBoard
             project={currentProject}
             tasks={filteredTasks}
-            onTaskMove={(id, section) => loadTasks()}
             onTaskCreate={handleTaskCreate}
             onTaskUpdate={loadTasks}
             isAdmin={isAdmin}

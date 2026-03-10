@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area 
+  PieChart, Pie, Cell, AreaChart, Area 
 } from 'recharts';
 import { AuthService } from '../services/authService';
 
@@ -64,8 +64,6 @@ const DARK_BG = "#1A1A1A";
 const CARD_BG = "#252525";
 const TEXT_MAIN = "#E0E0E0";
 const TEXT_SUB = "#A0A0A0";
-const ACCENT = "#00E676"; // Neon Green
-
 export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -265,7 +263,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                 paddingAngle={5}
                                 dataKey="value"
                             >
-                                {data.projects.map((entry, index) => (
+                                {data.projects.map((_, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="rgba(0,0,0,0)" />
                                 ))}
                             </Pie>

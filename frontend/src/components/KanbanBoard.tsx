@@ -10,14 +10,13 @@ import TaskDetailModal from './TaskDetailModal';
 interface KanbanBoardProps {
     project: any;
     tasks: any[];
-    onTaskMove: (taskId: string, sectionId: string) => void;
     onTaskCreate: (sectionId: string, content: string, assignedTo?: string | null) => void;
     onTaskUpdate?: () => void;
     isAdmin?: boolean;
     workspaceMembers?: any[];
 }
 
-export default function KanbanBoard({ project, tasks, onTaskMove, onTaskCreate, onTaskUpdate, isAdmin = true, workspaceMembers = [] }: KanbanBoardProps) {
+export default function KanbanBoard({ project, tasks, onTaskCreate, onTaskUpdate, isAdmin = true, workspaceMembers = [] }: KanbanBoardProps) {
     const [sections, setSections] = useState<any[]>([]);
     const [newTaskContent, setNewTaskContent] = useState<Record<string, string>>({});
     const [newTaskAssignee, setNewTaskAssignee] = useState<Record<string, string>>({});

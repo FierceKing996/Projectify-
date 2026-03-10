@@ -7,6 +7,7 @@ interface ReminderDropdownProps {
 }
 
 export default function ReminderDropdown({ tasks, onDismiss }: ReminderDropdownProps) {
+    void onDismiss;
     const [isOpen, setIsOpen] = useState(false);
     const [now, setNow] = useState(new Date());
 

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 // @ts-ignore
 import { TaskService } from '../services/taskService.js';
-import { FiInfo, FiEdit2, FiCheck, FiTrash2, FiRotateCw, FiAlertCircle } from 'react-icons/fi';
-export default function TaskCard({ task, workspaceId, onTaskChange }: any) {
+import { FiInfo, FiEdit2, FiCheck, FiTrash2 } from 'react-icons/fi';
+export default function TaskCard({ task, workspaceId: _workspaceId, onTaskChange }: any) {
   // ⚡ NEW: State to control our slick new UI features
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(task.content);

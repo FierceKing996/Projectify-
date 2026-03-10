@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FiMenu, FiChevronRight, FiChevronDown, FiPlus, FiLayout, FiTag, FiBriefcase, FiFolder, FiTrash2, FiUserPlus, FiTrendingUp, FiCalendar } from 'react-icons/fi';
+import { FiMenu, FiChevronRight, FiChevronDown, FiPlus, FiLayout, FiTag, FiBriefcase, FiFolder, FiTrash2, FiUserPlus, FiTrendingUp, FiCalendar, FiActivity } from 'react-icons/fi';
 import { ProjectService } from '../services/projectService';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import InputModal from './InputModal';
@@ -21,8 +21,8 @@ interface SidebarProps {
     selectedLabel?: string | null;
     onLabelSelect?: (label: string) => void;
     userRole?: string;
-    currentView?: 'kanban' | 'analytics' | 'calendar';
-    setCurrentView?: (view: 'kanban' | 'analytics' | 'calendar') => void;
+    currentView?: 'kanban' | 'analytics' | 'calendar' | 'activity';
+    setCurrentView?: (view: 'kanban' | 'analytics' | 'calendar' | 'activity') => void;
 }
 
 export default function Sidebar({
@@ -109,7 +109,26 @@ export default function Sidebar({
                 </button>
             </div>
             {!isCollapsed && (
-                <div className="mt-6 mb-2">
+                <div className="mt-6 mb-4">
+                    <div className="px-4 mb-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Navigation</div>
+                    <div className="space-y-1">
+                        <button
+                            onClick={() => setCurrentView && setCurrentView('activity')}
+                            className={`mx-2 flex w-[calc(100%-1rem)] items-center rounded-md px-3 py-2 text-sm transition-colors ${currentView === 'activity'
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                                }`}
+                        >
+                            <span className={`mr-3 ${currentView === 'activity' ? 'text-blue-500' : 'text-gray-400'}`}>
+                                <FiActivity size={14} />
+                            </span>
+                            <span className="flex-1 text-left">Global Activity</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+            {!isCollapsed && (
+                <div className="mb-2">
                     <div className="px-4 mb-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Labels</div>
                     <div className="space-y-1">
                         {labels.map(label => (
@@ -138,6 +157,20 @@ export default function Sidebar({
             )}
             {/* Workspaces List */}
             <div className="flex-1 overflow-y-auto py-4 space-y-1">
+                {isCollapsed && (
+                    <div className="mb-3 flex justify-center">
+                        <button
+                            onClick={() => setCurrentView && setCurrentView('activity')}
+                            className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${currentView === 'activity'
+                                ? 'bg-blue-50 text-blue-600'
+                                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+                                }`}
+                            title="Global Activity"
+                        >
+                            <FiActivity size={18} />
+                        </button>
+                    </div>
+                )}
                 {!isCollapsed && <div className="px-4 mb-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Workspaces</div>}
 
                 {workspaces.map((ws: any) => (
