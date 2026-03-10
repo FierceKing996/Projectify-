@@ -11,7 +11,7 @@ export const SyncManager = {
 
     init() {
         console.log(" SyncManager: Initialized");
-        
+
         // 1. Standard Online Event
         window.addEventListener('online', () => {
             console.log(" Event: Online - Syncing...");
@@ -33,7 +33,7 @@ export const SyncManager = {
 
     async processQueue() {
         if (this.isSyncing || !navigator.onLine) return;
-        
+
         const queue = await IDB.getAll('syncQueue');
         if (queue.length === 0) return;
 
@@ -48,7 +48,7 @@ export const SyncManager = {
             //  2. PROCESS THE BATCH (All creates and updates at once)
             if (taskUpserts.length > 0) {
                 console.log(` Batching ${taskUpserts.length} task updates into a single API call...`);
-                
+
                 // Extract payloads and ensure clientIds exist
                 const tasksToBatch = taskUpserts.map(item => {
                     if (item.action === 'CREATE' && !item.payload.clientId) {
@@ -80,12 +80,12 @@ export const SyncManager = {
 
             // 4. FINISH UP
             window.dispatchEvent(new CustomEvent('task-synced'));
-            this.retryDelay = 1000; 
+            this.retryDelay = 1000;
 
         } catch (err) {
             console.warn(` Sync Error (${this.retryDelay}ms backoff):`, err);
             // Wait and try again if the server is still unreachable
-            const jitter = Math.floor(Math.random() * (this.retryDelay * 0.2)); 
+            const jitter = Math.floor(Math.random() * (this.retryDelay * 0.2));
             const finalDelay = this.retryDelay + jitter;
             setTimeout(() => this.processQueue(), this.finalDelay);
             this.retryDelay = Math.min(this.retryDelay * 2, this.maxDelay);
@@ -96,11 +96,11 @@ export const SyncManager = {
 
     async syncItem(item) {
         let url = API_URL;
-        let options = { 
-            headers: { 
+        let options = {
+            headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${AuthService.getToken()}`
-            } 
+            }
         };
 
         // Ensure payload has clientId if it's a CREATE action

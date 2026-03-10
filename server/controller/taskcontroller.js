@@ -148,23 +148,33 @@ exports.syncBatch = catchAsync(async (req, res, next) => {
     const { tasks } = req.body;
     if (!tasks || tasks.length === 0) return res.status(200).json({ status: 'success' });
 
-    const operations = tasks.map(task => {
-        const updateData = { ...task, isDeleted: false };
-        if (task.completed && !task.completedAt) {
-            updateData.completedAt = new Date();
-        } else if (task.completed === false) {
-            updateData.completedAt = null;
-        }
+    const operations = tasks
+        .filter(t => t && t.clientId) // ⚡ SAFETY: Skip invalid/empty task objects
+        .map(task => {
+            // ⚡ MUST remove _id to prevent MongoDB "Modifying immutable field '_id'" errors
+            const { _id, id, ...updateData } = task;
+            updateData.isDeleted = false;
 
-        return {
-            updateOne: {
-                filter: { clientId: task.clientId },
-                update: updateData, // Ensure it's not deleted if syncing, and track completion
-                upsert: true // Create if doesn't exist
+            if (task.completed && !task.completedAt) {
+                updateData.completedAt = new Date();
+            } else if (task.completed === false) {
+                updateData.completedAt = null;
             }
-        };
-    });
 
-    await Task.bulkWrite(operations);
-    res.status(200).json({ status: 'success', message: 'Batch synced' });
+            return {
+                updateOne: {
+                    filter: { clientId: task.clientId },
+                    update: { $set: updateData },
+                    upsert: true // Create if doesn't exist
+                }
+            };
+        });
+
+    try {
+        await Task.bulkWrite(operations);
+        res.status(200).json({ status: 'success', message: 'Batch synced' });
+    } catch (err) {
+        console.error("🔥 BATCH SYNC ERROR:", err);
+        return res.status(500).json({ status: 'error', message: err.message });
+    }
 });
