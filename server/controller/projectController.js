@@ -5,8 +5,16 @@ const AppError = require('../utils/AppError');
 const sseManager = require('../service/sseManager');
 
 exports.createProject = catchAsync(async (req, res, next) => {
-    // 1. Create the project
-    const newProject = await Project.create(req.body);
+    const payload = {
+        title: req.body.title,
+        workspaceId: req.body.workspaceId
+    };
+
+    if (Array.isArray(req.body.sections) && req.body.sections.length > 0) {
+        payload.sections = req.body.sections;
+    }
+
+    const newProject = await Project.create(payload);
 
     res.status(201).json({
         status: 'success',

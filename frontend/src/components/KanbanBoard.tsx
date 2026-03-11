@@ -79,7 +79,8 @@ export default function KanbanBoard({ project, tasks, onTaskCreate, onTaskUpdate
         }
 
         // ⚡ 2. BACKGROUND SERVER SYNC
-        const isCompleted = destination.droppableId.toLowerCase().includes('done');
+        const destinationSection = sections.find((section) => section.id === destination.droppableId);
+        const isCompleted = Boolean(destinationSection?.isCompleted) || destination.droppableId.toLowerCase().includes('done');
         await TaskService.moveTask(draggableId, destination.droppableId, destination.index, isCompleted);
 
         // ⚡ 3. PERMANENT REFRESH

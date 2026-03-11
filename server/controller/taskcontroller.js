@@ -66,7 +66,7 @@ exports.createTask = catchAsync(async (req, res, next) => {
     // 1. Log the body to verify data is coming in
     console.log("Creating Task Payload:", req.body);
 
-    const { content, clientId, priority, sectionId, projectId, workspaceId, labels, reminderAt, description, subtasks, assignedTo } = req.body;
+    const { content, clientId, priority, sectionId, projectId, workspaceId, labels, reminderAt, description, subtasks, assignedTo, order, completed } = req.body;
 
     // 2. Validate essential fields
     if (!content || !workspaceId || !projectId) {
@@ -85,6 +85,9 @@ exports.createTask = catchAsync(async (req, res, next) => {
         description: description || '',
         subtasks: subtasks || [],
         assignedTo: assignedTo || null,
+        order: typeof order === 'number' ? order : 0,
+        completed: Boolean(completed),
+        completedAt: completed ? new Date() : null,
         userId: req.user ? req.user._id : null,
         isDeleted: false // Explicitly set false
     });

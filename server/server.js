@@ -44,6 +44,7 @@ app.use('/api/activity', protect, activityRoutes);
 // Auth Routes
 app.post('/api/auth/signup', authController.signup);
 app.post('/api/auth/login', authController.login);
+app.patch('/api/auth/onboarding', protect, authController.completeOnboarding);
 
 // Protected Routes
 app.use('/api/tasks', protect, taskRoutes);

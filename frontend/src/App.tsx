@@ -20,6 +20,8 @@ import KanbanBoard from './components/KanbanBoard';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import CalendarView from './components/CalendarView';
 import ActivityLog from './components/ActivityLog';
+import TemplateChooser from './components/TemplateChooser';
+import { OnboardingService } from './services/onboardingService';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(AuthService.isAuthenticated());
@@ -51,6 +53,8 @@ function App() {
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const [workspaceMembers, setWorkspaceMembers] = useState<any[]>([]);
   const [currentView, setCurrentView] = useState<'kanban' | 'analytics' | 'calendar' | 'activity'>('kanban');
+  const [isSettingUpTemplate, setIsSettingUpTemplate] = useState(false);
+  const [templateError, setTemplateError] = useState('');
   const isLocalPersonalWorkspace = currentWorkspace?.id === 'default-personal';
 
   // --- COLLABORATION: Heartbeat every 30s ---
@@ -205,6 +209,8 @@ function App() {
 
   // --- ⚡ 3. HANDLE CREATE TASK ---
   const handleTaskCreate = async (sectionId: string, content: string, assignedTo?: string | null) => {
+    const targetSection = currentProject?.sections?.find((section: any) => section.id === sectionId);
+    const isCompleted = Boolean(targetSection?.isCompleted) || sectionId.toLowerCase().includes('done');
     const tempId = `temp-${Date.now()}`;
     const newTask = {
       clientId: tempId,
@@ -214,7 +220,8 @@ function App() {
       workspaceId: currentWorkspace.id,
       priority: 'Medium',
       order: tasks.length,
-      completed: false,
+      completed: isCompleted,
+      completedAt: isCompleted ? new Date().toISOString() : null,
       assignedTo: assignedTo || null
     };
 
@@ -326,6 +333,34 @@ function App() {
       <div className="flex items-center justify-center h-screen bg-[#1A1A1A] text-[#00ff88]">
         Initializing System...
       </div>
+    );
+  }
+
+  if (user?.onboardingCompleted === false) {
+    return (
+      <TemplateChooser
+        error={templateError}
+        isSubmitting={isSettingUpTemplate}
+        onSelect={async (templateId) => {
+          setTemplateError('');
+          setIsSettingUpTemplate(true);
+
+          try {
+            const { workspace, project, user: updatedUser } = await OnboardingService.createStarterBoard(templateId);
+            setCurrentWorkspace(workspace);
+            setCurrentProject(project);
+            setTasks([]);
+            setCurrentView('kanban');
+            setUser(updatedUser);
+            setUserName(updatedUser?.username || 'User');
+            setSidebarRefreshTrigger(prev => prev + 1);
+          } catch (err: any) {
+            setTemplateError(err.message || 'Failed to set up your starter board.');
+          } finally {
+            setIsSettingUpTemplate(false);
+          }
+        }}
+      />
     );
   }
   // Filter by search query AND selected label

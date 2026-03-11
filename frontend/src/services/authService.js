@@ -2,6 +2,12 @@ import { IDB } from '../db/idbHelper.js'; //
 
 const API_URL = 'http://localhost:5000/api/auth';
 
+const persistSession = (token, userObj) => {
+    localStorage.setItem('agency_token', token);
+    localStorage.setItem('agency_user', userObj.username);
+    localStorage.setItem('agency_user_obj', JSON.stringify(userObj));
+};
+
 export const AuthService = {
     async login(username, password) {
         const res = await fetch(`${API_URL}/login`, {
@@ -18,10 +24,7 @@ export const AuthService = {
             await IDB.clear('syncQueue');
             const userObj = data.data?.user || data.user;
             const token = data.token;
-            debugger;
-            localStorage.setItem('agency_token', token);
-            localStorage.setItem('agency_user', userObj.username);
-            localStorage.setItem('agency_user_obj', JSON.stringify(userObj));
+            persistSession(token, userObj);
             return userObj;
         }
         throw new Error(data.message || 'Login failed');
@@ -41,16 +44,32 @@ export const AuthService = {
             await IDB.clear('tasks');
             await IDB.clear('syncQueue');
             const userObj = data.data?.user || data.user;
-            console.log(JSON.stringify(userObj));
             const token = data.token;
 
-            localStorage.setItem('agency_token', token);
-            localStorage.setItem('agency_user', userObj.username);
-            localStorage.setItem('agency_user_obj', JSON.stringify(userObj));
+            persistSession(token, userObj);
 
             return userObj;
         }
         throw new Error(data.message || 'Signup failed');
+    },
+
+    async completeOnboarding() {
+        const res = await fetch(`${API_URL}/onboarding`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.getToken()}`
+            }
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.message || 'Failed to finish onboarding');
+        }
+
+        const userObj = data.data?.user || data.user;
+        this.setStoredUser(userObj);
+        return userObj;
     },
 
     logout() {
@@ -65,6 +84,10 @@ export const AuthService = {
 
     isAuthenticated() {
         return !!this.getToken();
+    },
+    setStoredUser(userObj) {
+        localStorage.setItem('agency_user', userObj.username);
+        localStorage.setItem('agency_user_obj', JSON.stringify(userObj));
     },
     getUser() {
         const userStr = localStorage.getItem('agency_user_obj');

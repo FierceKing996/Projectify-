@@ -10,6 +10,12 @@ const signToken = (id) => {
     return jwt.sign({ id }, JWT_SECRET, { expiresIn: '90d' });
 };
 
+const serializeUser = (user) => {
+    const userObj = typeof user.toObject === 'function' ? user.toObject() : { ...user };
+    delete userObj.password;
+    return userObj;
+};
+
 exports.signup = catchAsync(async (req, res, next) => {
     const newUser = await User.create({
         username: req.body.username,
@@ -17,7 +23,7 @@ exports.signup = catchAsync(async (req, res, next) => {
         password: req.body.password
     });
     const token = signToken(newUser._id);
-    res.status(201).json({ status: 'success', token, data: { user: newUser } });
+    res.status(201).json({ status: 'success', token, data: { user: serializeUser(newUser) } });
 });
 
 exports.login = (req, res, next) => {
@@ -30,7 +36,26 @@ exports.login = (req, res, next) => {
         }
 
         const token = signToken(user._id);
-        res.status(200).json({ status: 'success', token, data: { user } });
+        res.status(200).json({ status: 'success', token, data: { user: serializeUser(user) } });
 
     })(req, res, next);
 };
+
+exports.completeOnboarding = catchAsync(async (req, res, next) => {
+    const updatedUser = await User.findByIdAndUpdate(
+        req.user._id,
+        { onboardingCompleted: true },
+        { new: true, runValidators: true }
+    );
+
+    if (!updatedUser) {
+        return next(new AppError('User not found', 404));
+    }
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            user: serializeUser(updatedUser)
+        }
+    });
+});

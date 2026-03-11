@@ -27,6 +27,10 @@ const UserSchema = new mongoose.Schema({
         enum: ['user', 'superadmin'],
         default: 'user'
     },
+    onboardingCompleted: {
+        type: Boolean,
+        default: false
+    },
     lastActiveAt: { type: Date, default: Date.now },
     createdAt: { type: Date, default: Date.now }
 });

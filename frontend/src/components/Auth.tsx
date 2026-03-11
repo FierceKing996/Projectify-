@@ -21,14 +21,13 @@ export default function Auth({ onLogin }: any) {
             }
         }
         try {
+            let userObj;
             if (isLogin) {
-                const userObj = await AuthService.login(username, password);
-                onLogin(userObj);
+                userObj = await AuthService.login(username, password);
             } else {
-                const userObj = await AuthService.signup(username, password, email);
-                onLogin(userObj);
+                userObj = await AuthService.signup(username, password, email);
             }
-            onLogin(); // Tell App.tsx we are logged in
+            onLogin(userObj);
         } catch (err: any) {
             setError(err.message);
         }

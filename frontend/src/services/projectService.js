@@ -3,14 +3,14 @@ import { AuthService } from './authService';
 const API_URL = 'http://localhost:5000/api/projects';
 
 export const ProjectService = {
-    async createProject(title, workspaceId) {
+    async createProject(title, workspaceId, sections) {
         const res = await fetch(API_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${AuthService.getToken()}`
             },
-            body: JSON.stringify({ title, workspaceId })
+            body: JSON.stringify({ title, workspaceId, sections })
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
