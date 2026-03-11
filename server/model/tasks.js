@@ -29,5 +29,10 @@ const taskSchema = new mongoose.Schema({
     isDeleted: { type: Boolean, default: false },
 }, { timestamps: true });
 
+// Add Indexes for performance and common queries
+taskSchema.index({ workspaceId: 1, projectId: 1 });
+taskSchema.index({ assignedTo: 1 });
+taskSchema.index({ isDeleted: 1 });
+
 const Task = mongoose.model('Task', taskSchema);
 module.exports = Task;

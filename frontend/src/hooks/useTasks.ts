@@ -1,36 +1,74 @@
-import { useState, useEffect } from 'react';
-// @ts-ignore
-import { TaskService } from '../services/taskService.js';
+import { useState, useEffect, useCallback } from 'react';
+import { TaskService } from '../services/taskService';
 
-export function useTasks(workspaceId: string) {
+export function useTasks(currentProject: any, currentWorkspace: any) {
   const [tasks, setTasks] = useState<any[]>([]);
 
-  const fetchTasks = async () => {
-    if (!workspaceId) return;
-    const data = await TaskService.getTasks(workspaceId);
-    setTasks(data);
-  };
+  // --- ⚡ 1. DEFINE LOAD TASKS ---
+  const loadTasks = useCallback(async () => {
+    if (!currentProject) return;
+    try {
+      // Fetch all tasks for this workspace
+      const allTasks = await TaskService.getTasks(currentWorkspace.id);
 
-  // Run on mount, when workspace changes, or when background sync happens
+      // Filter client-side for the current project
+      const projectTasks = allTasks.filter((t: any) => t.projectId === currentProject._id);
+      setTasks(projectTasks);
+    } catch (err) {
+      console.error("Failed to load tasks", err);
+    }
+  }, [currentProject, currentWorkspace]);
+
+  // --- ⚡ 2. USE EFFECT TO LOAD ---
   useEffect(() => {
-    fetchTasks();
-    const handleSync = () => fetchTasks();
-    window.addEventListener('task-synced', handleSync);
-    
-    return () => {
-      window.removeEventListener('task-synced', handleSync);
+    if (currentProject) {
+      loadTasks();
+    } else {
+      setTasks([]);
+    }
+
+    // Auto-refresh when internet comes back
+    const handleOnline = () => {
+      console.log("Back online! Refreshing tasks...");
+      setTimeout(() => loadTasks(), 2000); // Wait 2s for SyncManager to finish uploading
     };
-  }, [workspaceId]);
 
-  // Pre-filter the data for the UI
-  const activeTasks = tasks.filter(t => !t.completed);
-  const completedTasks = tasks.filter(t => t.completed);
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [currentProject, loadTasks]);
 
-  // Return the data and the refresh function to the component
-  return {
-    tasks,
-    activeTasks,
-    completedTasks,
-    fetchTasks
+  // --- ⚡ 3. HANDLE CREATE TASK ---
+  const handleTaskCreate = async (sectionId: string, content: string, assignedTo?: string | null) => {
+    if (!currentProject || !currentWorkspace) return;
+    
+    const targetSection = currentProject.sections?.find((section: any) => section.id === sectionId);
+    const isCompleted = Boolean(targetSection?.isCompleted) || sectionId.toLowerCase().includes('done');
+    const tempId = `temp-${Date.now()}`;
+    const newTask = {
+      clientId: tempId,
+      content,
+      sectionId,
+      projectId: currentProject._id,
+      workspaceId: currentWorkspace.id,
+      priority: 'Medium',
+      order: tasks.length,
+      completed: isCompleted,
+      completedAt: isCompleted ? new Date().toISOString() : null,
+      assignedTo: assignedTo || null
+    };
+
+    // Optimistic Update (Show it immediately)
+    setTasks(prev => [...prev, newTask]);
+
+    try {
+      // Sync to Backend
+      await TaskService.addTask(newTask);
+      // Refresh to get the real ID from server
+      loadTasks();
+    } catch (err) {
+      console.error("Failed to create task", err);
+    }
   };
+
+  return { tasks, setTasks, loadTasks, handleTaskCreate };
 }

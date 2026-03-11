@@ -1,14 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 // Import engines
-import { initDB } from './db/dbconfig.js';
-import { SyncManager } from './services/syncManager.js';
 import { AuthService } from './services/authService.js';
-import { IDB } from './db/idbHelper.js';
-import { TaskService } from './services/taskService';
 import { WorkspaceService } from './services/workspaceService.js';
 import { ProjectService } from './services/projectService';
-import { CollaborationService } from './services/collaborationService.js';
 import Auth from './components/Auth';
 
 // Import UI Components
@@ -23,13 +18,18 @@ import ActivityLog from './components/ActivityLog';
 import TemplateChooser from './components/TemplateChooser';
 import { OnboardingService } from './services/onboardingService';
 
+// Import Custom Hooks
+import { useCollaboration } from './hooks/useCollaboration';
+import { useTasks } from './hooks/useTasks';
+import { useRealTimeSync } from './hooks/useRealTimeSync';
+import { useAppInitialization } from './hooks/useAppInitialization';
+
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(AuthService.isAuthenticated());
   const [userName, setUserName] = useState(localStorage.getItem('agency_user') || 'User');
 
   // ⚡ KANBAN STATE
   const [currentProject, setCurrentProject] = useState<any>(null);
-  const [tasks, setTasks] = useState<any[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -42,7 +42,6 @@ function App() {
     }
   });
 
-  const [isDbReady, setIsDbReady] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [currentWorkspace, setCurrentWorkspace] = useState({
     id: 'default-personal',
@@ -51,192 +50,36 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
-  const [workspaceMembers, setWorkspaceMembers] = useState<any[]>([]);
   const [currentView, setCurrentView] = useState<'kanban' | 'analytics' | 'calendar' | 'activity'>('kanban');
   const [isSettingUpTemplate, setIsSettingUpTemplate] = useState(false);
   const [templateError, setTemplateError] = useState('');
   const isLocalPersonalWorkspace = currentWorkspace?.id === 'default-personal';
 
-  // --- COLLABORATION: Heartbeat every 30s ---
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    // Send heartbeat immediately
-    CollaborationService.sendHeartbeat();
-    const interval = setInterval(() => {
-      CollaborationService.sendHeartbeat();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  // --- CUSTOM HOOKS ---
+  const { isDbReady } = useAppInitialization(isAuthenticated);
+  
+  const { workspaceMembers } = useCollaboration(
+    isAuthenticated,
+    currentWorkspace,
+    isLocalPersonalWorkspace,
+    setSidebarRefreshTrigger
+  );
 
-  // --- COLLABORATION: Fetch workspace members & presence ---
-  useEffect(() => {
-    if (!isAuthenticated || !currentWorkspace?.id || isLocalPersonalWorkspace) return;
-    // Reset immediately to prevent stale avatars from stacking
-    setWorkspaceMembers([]);
-    const fetchMembers = async () => {
-      try {
-        const members = await CollaborationService.getMembers(currentWorkspace.id);
-        setWorkspaceMembers(members);
-      } catch {
-        setWorkspaceMembers([]);
-      }
-    };
-    fetchMembers();
-    // Poll presence every 30s
-    const presenceInterval = setInterval(fetchMembers, 30000);
-    return () => clearInterval(presenceInterval);
-  }, [isAuthenticated, currentWorkspace, isLocalPersonalWorkspace]);
+  const { tasks, setTasks, loadTasks, handleTaskCreate } = useTasks(
+    currentProject,
+    currentWorkspace
+  );
 
-  // --- COLLABORATION: Handle invite token in URL ---
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const params = new URLSearchParams(window.location.search);
-    const inviteToken = params.get('invite');
-    if (inviteToken) {
-      CollaborationService.acceptInvite(inviteToken)
-        .then((data: any) => {
-          if (data.status === 'success') {
-            alert(`🎉 ${data.message}`);
-            setSidebarRefreshTrigger(prev => prev + 1);
-          } else if (data.status === 'pending_signup') {
-            alert(data.message);
-          }
-          // Clean URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-        })
-        .catch((err: Error) => {
-          console.error('Failed to accept invite:', err.message);
-          window.history.replaceState({}, document.title, window.location.pathname);
-        });
-    }
-  }, [isAuthenticated]);
-
-  // --- ⚡ 1. DEFINE LOAD TASKS (The Missing Piece) ---
-  const loadTasks = async () => {
-    if (!currentProject) return;
-    try {
-      // Fetch all tasks for this workspace
-      const allTasks = await TaskService.getTasks(currentWorkspace.id);
-
-      // Filter client-side for the current project
-      // (Later we can optimize this to fetch only project tasks from backend)
-      const projectTasks = allTasks.filter((t: any) => t.projectId === currentProject._id);
-      setTasks(projectTasks);
-    } catch (err) {
-      console.error("Failed to load tasks", err);
-    }
-  };
-
-  // --- ⚡ 2. USE EFFECT TO LOAD ---
-  useEffect(() => {
-    if (currentProject) {
-      loadTasks();
-    }
-
-    // ⚡ NEW: Auto-refresh when internet comes back
-    const handleOnline = () => {
-      console.log("Back online! Refreshing tasks...");
-      setTimeout(() => loadTasks(), 2000); // Wait 2s for SyncManager to finish uploading
-    };
-
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, [currentProject, currentWorkspace]); // Reload if project OR workspace changes
-
-  // --- 📡 SSE: Real-time task sync for shared workspaces ---
-  useEffect(() => {
-    if (!isAuthenticated || !currentWorkspace?.id || isLocalPersonalWorkspace) return;
-
-    const token = localStorage.getItem('agency_token');
-    const eventSource = new EventSource(
-      `http://localhost:5000/api/collaboration/workspaces/${currentWorkspace.id}/events?token=${token}`
-    );
-
-    eventSource.onmessage = (event) => {
-      try {
-        const { type, data } = JSON.parse(event.data);
-        if (['task_created', 'task_updated', 'task_moved'].includes(type)) {
-          console.log(`📡 SSE: Received ${type}, refreshing tasks...`);
-          loadTasks();
-        } else if (type === 'task_deleted' && data?.taskId) {
-          console.log(`📡 SSE: Task deleted (${data.taskId}), removing locally...`);
-          // Remove from React state immediately
-          setTasks(prev => prev.filter(t =>
-            t.clientId !== data.taskId && t._id !== data.taskId && t.id !== data.taskId
-          ));
-
-          // Bulletproof IDB remove: find exact local task first
-          IDB.getAll('tasks').then((allTasks: any[]) => {
-            const localTask = allTasks.find(t =>
-              t.id === data.taskId || t._id === data.taskId || t.clientId === data.taskId
-            );
-            if (localTask) {
-              IDB.delete('tasks', localTask.id).catch(() => { });
-            }
-          });
-        } else if (['project_created', 'project_updated', 'project_deleted'].includes(type) && data) {
-          console.log(`📡 SSE: Received ${type}, refreshing projects...`);
-          // Force sidebar to refetch projects
-          setSidebarRefreshTrigger(prev => prev + 1);
-
-          // If the current project was updated (e.g., sections moved/renamed), update state
-          if (type === 'project_updated' && currentProject && currentProject._id === data.project._id) {
-            setCurrentProject(data.project);
-            // Also optionally update IDB local copy if you cache projects locally
-            // ProjectService/IDB sync for projects might be lighter weight
-          }
-
-          // If the current project was deleted, deselect it
-          if (type === 'project_deleted' && currentProject && currentProject._id === data.projectId) {
-            setCurrentProject(null);
-            setTasks([]);
-          }
-        }
-      } catch (err) {
-        console.warn('SSE parse error:', err);
-      }
-    };
-
-    eventSource.onerror = () => {
-      console.warn('📡 SSE connection error, will auto-reconnect...');
-    };
-
-    return () => {
-      eventSource.close();
-      console.log('📡 SSE connection closed');
-    };
-  }, [isAuthenticated, currentWorkspace, currentProject, isLocalPersonalWorkspace]);
-
-  // --- ⚡ 3. HANDLE CREATE TASK ---
-  const handleTaskCreate = async (sectionId: string, content: string, assignedTo?: string | null) => {
-    const targetSection = currentProject?.sections?.find((section: any) => section.id === sectionId);
-    const isCompleted = Boolean(targetSection?.isCompleted) || sectionId.toLowerCase().includes('done');
-    const tempId = `temp-${Date.now()}`;
-    const newTask = {
-      clientId: tempId,
-      content,
-      sectionId,
-      projectId: currentProject._id,
-      workspaceId: currentWorkspace.id,
-      priority: 'Medium',
-      order: tasks.length,
-      completed: isCompleted,
-      completedAt: isCompleted ? new Date().toISOString() : null,
-      assignedTo: assignedTo || null
-    };
-
-    // Optimistic Update (Show it immediately)
-    setTasks(prev => [...prev, newTask]);
-
-    try {
-      // Sync to Backend
-      await TaskService.addTask(newTask);
-      // Refresh to get the real ID from server
-      loadTasks();
-    } catch (err) {
-      console.error("Failed to create task", err);
-    }
-  };
+  useRealTimeSync(
+    isAuthenticated,
+    currentWorkspace,
+    currentProject,
+    isLocalPersonalWorkspace,
+    loadTasks,
+    setTasks,
+    setSidebarRefreshTrigger,
+    setCurrentProject
+  );
 
   // --- DELETE HANDLERS ---
   const handleWorkspaceDelete = async (wsId: string) => {
@@ -267,39 +110,6 @@ function App() {
       console.error('Failed to delete project', err);
     }
   };
-
-  // --- INITIALIZATION ---
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const startupSequence = async () => {
-      try {
-        await initDB();
-        SyncManager.init();
-
-        // Try to fetch archives if online
-        if (navigator.onLine) {
-          try {
-            const res = await fetch('http://localhost:5000/api/archives', {
-              headers: { 'Authorization': `Bearer ${AuthService.getToken()}` }
-            });
-            if (res.ok) {
-              const { data } = await res.json();
-              for (const arc of data.archives) {
-                await IDB.put('archives', { ...arc, type: 'AES-GCM' });
-              }
-            }
-          } catch (err) { console.warn("Offline: Could not fetch cloud archives."); }
-        }
-        setIsDbReady(true);
-        console.log("App Online");
-      } catch (error) {
-        console.error("Critical System Failure: DB Init", error);
-      }
-    };
-
-    startupSequence();
-  }, [isAuthenticated]);
 
   // --- AUTH SCREENS ---
   if (!isAuthenticated) {
@@ -364,13 +174,13 @@ function App() {
     );
   }
   // Filter by search query AND selected label
-  const filteredTasks = tasks.filter(task => {
+  const filteredTasks = tasks.filter((task: any) => {
     const matchesSearch = task.content.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesLabel = !selectedLabel || (task.labels && task.labels.includes(selectedLabel));
     return matchesSearch && matchesLabel;
   });
 
-  const allLabels = Array.from(new Set(tasks.flatMap(task => task.labels || [])));
+  const allLabels = Array.from(new Set(tasks.flatMap((task: any) => task.labels || [])));
 
   // --- Compute user's role in current workspace ---
   const currentUserId = user?._id || user?.id;
@@ -391,7 +201,7 @@ function App() {
         refreshTrigger={sidebarRefreshTrigger}
         currentProjectId={currentProject?._id}
         onProjectSelect={setCurrentProject}
-        labels={allLabels}
+        labels={allLabels as string[]}
         selectedLabel={selectedLabel}
         onLabelSelect={(label) => setSelectedLabel(selectedLabel === label ? null : label)}
         onWorkspaceDelete={handleWorkspaceDelete}
@@ -443,8 +253,6 @@ function App() {
           </div>
         )}
 
-        {/* 4. Removed Footer to match the clean reference image */}
-        {/* <Footer workspaceId={currentWorkspace.id} onLogout={() => setIsAuthenticated(false)} /> */}
       </main>
 
       {isModalOpen && (
