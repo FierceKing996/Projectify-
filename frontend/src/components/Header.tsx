@@ -10,11 +10,14 @@ interface HeaderProps {
   setSearchQuery: (query: string) => void;
   tasks?: any[];
   workspaceMembers?: any[];
+  currentView?: 'kanban' | 'analytics' | 'calendar' | 'activity' | 'scratchpad';
 }
 
-export default function Header({ username, searchQuery, setSearchQuery, tasks = [], workspaceMembers = [] }: HeaderProps) {
+export default function Header({ username, searchQuery, setSearchQuery, tasks = [], workspaceMembers = [], currentView = 'kanban' }: HeaderProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const isScratchpadView = currentView === 'scratchpad';
+
   const handleLogout = () => {
     AuthService.logout();
     window.location.reload(); // Force refresh to clear state and go to login
@@ -30,10 +33,11 @@ export default function Header({ username, searchQuery, setSearchQuery, tasks = 
         </div>
         <input
           type="text"
-          placeholder="Search tasks..."
-          className="bg-transparent border-none outline-none text-sm text-gray-700 placeholder-gray-400 w-full"
+          placeholder={isScratchpadView ? 'Task search is unavailable in scratchpad' : 'Search tasks...'}
+          className="bg-transparent border-none outline-none text-sm text-gray-700 placeholder-gray-400 w-full disabled:cursor-not-allowed disabled:text-gray-400"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          disabled={isScratchpadView}
         />
       </div>
 

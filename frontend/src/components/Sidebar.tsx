@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FiMenu, FiChevronRight, FiChevronDown, FiPlus, FiLayout, FiTag, FiBriefcase, FiFolder, FiTrash2, FiUserPlus, FiTrendingUp, FiCalendar, FiActivity } from 'react-icons/fi';
+import { FiMenu, FiChevronRight, FiChevronDown, FiPlus, FiLayout, FiTag, FiBriefcase, FiFolder, FiTrash2, FiUserPlus, FiTrendingUp, FiCalendar, FiActivity, FiEdit3 } from 'react-icons/fi';
 import { ProjectService } from '../services/projectService';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import InputModal from './InputModal';
@@ -21,8 +21,8 @@ interface SidebarProps {
     selectedLabel?: string | null;
     onLabelSelect?: (label: string) => void;
     userRole?: string;
-    currentView?: 'kanban' | 'analytics' | 'calendar' | 'activity';
-    setCurrentView?: (view: 'kanban' | 'analytics' | 'calendar' | 'activity') => void;
+    currentView?: 'kanban' | 'analytics' | 'calendar' | 'activity' | 'scratchpad';
+    setCurrentView?: (view: 'kanban' | 'analytics' | 'calendar' | 'activity' | 'scratchpad') => void;
 }
 
 export default function Sidebar({
@@ -124,6 +124,18 @@ export default function Sidebar({
                             </span>
                             <span className="flex-1 text-left">Global Activity</span>
                         </button>
+                        <button
+                            onClick={() => setCurrentView && setCurrentView('scratchpad')}
+                            className={`mx-2 flex w-[calc(100%-1rem)] items-center rounded-md px-3 py-2 text-sm transition-colors ${currentView === 'scratchpad'
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                                }`}
+                        >
+                            <span className={`mr-3 ${currentView === 'scratchpad' ? 'text-blue-500' : 'text-gray-400'}`}>
+                                <FiEdit3 size={14} />
+                            </span>
+                            <span className="flex-1 text-left">Scratchpad</span>
+                        </button>
                     </div>
                 </div>
             )}
@@ -158,7 +170,7 @@ export default function Sidebar({
             {/* Workspaces List */}
             <div className="flex-1 overflow-y-auto py-4 space-y-1">
                 {isCollapsed && (
-                    <div className="mb-3 flex justify-center">
+                    <div className="mb-3 flex flex-col items-center gap-2">
                         <button
                             onClick={() => setCurrentView && setCurrentView('activity')}
                             className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${currentView === 'activity'
@@ -168,6 +180,16 @@ export default function Sidebar({
                             title="Global Activity"
                         >
                             <FiActivity size={18} />
+                        </button>
+                        <button
+                            onClick={() => setCurrentView && setCurrentView('scratchpad')}
+                            className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${currentView === 'scratchpad'
+                                ? 'bg-blue-50 text-blue-600'
+                                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+                                }`}
+                            title="Scratchpad"
+                        >
+                            <FiEdit3 size={18} />
                         </button>
                     </div>
                 )}

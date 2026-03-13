@@ -15,6 +15,7 @@ import KanbanBoard from './components/KanbanBoard';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import CalendarView from './components/CalendarView';
 import ActivityLog from './components/ActivityLog';
+import Scratchpad from './components/Scratchpad';
 import TemplateChooser from './components/TemplateChooser';
 import { OnboardingService } from './services/onboardingService';
 
@@ -50,7 +51,7 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'kanban' | 'analytics' | 'calendar' | 'activity'>('kanban');
+  const [currentView, setCurrentView] = useState<'kanban' | 'analytics' | 'calendar' | 'activity' | 'scratchpad'>('kanban');
   const [isSettingUpTemplate, setIsSettingUpTemplate] = useState(false);
   const [templateError, setTemplateError] = useState('');
   const isLocalPersonalWorkspace = currentWorkspace?.id === 'default-personal';
@@ -219,11 +220,14 @@ function App() {
           setSearchQuery={setSearchQuery}
           tasks={tasks}
           workspaceMembers={workspaceMembers}
+          currentView={currentView}
         />
 
         {/* SWITCH: Show Kanban, Analytics, Calendar OR Empty State */}
         {currentView === 'activity' ? (
           <ActivityLog />
+        ) : currentView === 'scratchpad' ? (
+          <Scratchpad />
         ) : currentView === 'analytics' ? (
           <AnalyticsDashboard workspaceId={currentWorkspace.id} />
         ) : currentView === 'calendar' ? (
