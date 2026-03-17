@@ -1,30 +1,36 @@
-Key Features
-- Offline-First Architecture
-Zero Latency: Create tasks, edit content, and switch workspaces instantly, even without internet.
+## Key Features
 
-Robust Sync Engine: Uses a custom SyncManager with exponential backoff and jitter to handle network flaky-ness.
+- **Offline-First Architecture**
+  - **Zero Latency**: Create tasks, edit content, and switch workspaces instantly, even without internet.
+  - **Robust Sync Engine**: Uses a custom SyncManager with exponential backoff and jitter to handle network flaky-ness.
+  - **Soft References**: Utilizes UUIDs for frontend relationships, allowing complex relational data to be created offline before the database assigns real IDs.
 
-Soft References: Utilizes UUIDs for frontend relationships, allowing complex relational data (Tasks inside Workspaces) to be created offline before the database assigns real IDs.
+- **Kanban Board & Task Management**
+  - **Drag-and-Drop functionality**: Intuitive drag-and-drop support for reordering tasks and sections effortlessly.
+  - **Task Reminders & Notifications**: Set reminders on tasks with a datetime picker and receive notifications via a header bell icon.
+  - **Interactive Modals**: Seamlessly create and edit workspaces, projects, and tasks using custom modals.
+  - **Template Support**: Bootstrap your workflows by selecting pre-built templates.
+  - **Activity Logs**: Track updates, modifications, and task activities dynamically.
 
-- Executive Analytics (Super Admin)
-Real-Time Dashboard: A dedicated command center for Super Admins.
+- **Interactive Views & Brainstorming**
+  - **Calendar View**: Manage and visualize task schedules and deadlines.
+  - **Scratchpad with Voice Support**: A dedicated area for jotting down ideas quickly with voice-to-text dictation capabilities.
+  - **Team Collaboration**: Manage workspace access and collaborate smoothly through the Members Panel.
 
-Productivity Scoring: Automated scoring based on task volume, completion speed, and system usage.
+- **Executive Analytics (Super Admin)**
+  - **Real-Time Dashboard**: A dedicated command center for Super Admins.
+  - **Productivity Scoring**: Automated scoring based on task volume, completion speed, and system usage.
+  - **Heatmaps**: Visual analysis of peak productivity hours (UTC).
+  - **Growth Trends**: Interactive charts tracking user signups vs. task volume over time.
+  - **System Health**: Monitoring of "Online" users and global active/completed task ratios.
 
-Heatmaps: Visual analysis of peak productivity hours (UTC).
+- **Security & Background Services**
+  - **JWT Authentication**: Secure, stateless authentication using Passport.js.
+  - **Role-Based Access Control (RBAC)**: Distinct interfaces for Standard Users (Task Board) and Super Admins (Analytics Console).
+  - **Encrypted Archives**: Completed tasks are encrypted before archiving for long-term storage security.
+  - **Background Processing**: SQS and Worker implementations for background dataset synchronization and queuing.
 
-Growth Trends: Interactive charts tracking user signups vs. task volume over time.
-
-System Health: Monitoring of "Online" users and global active/completed task ratios.
-
-- Security & Role-Based Access
-JWT Authentication: Secure, stateless authentication using Passport.js.
-
-Role-Based Access Control (RBAC): Distinct interfaces for Standard Users (Task Board) and Super Admins (Analytics Console).
-
-Encrypted Archives: Completed tasks are encrypted before archiving for long-term storage security.
-
-- Tech Stack
+## Tech Stack
 Frontend: React (v19), TypeScript, Vite
 
 Styling: CSS3, Responsive Grid/Flexbox
